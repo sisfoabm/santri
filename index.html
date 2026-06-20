@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Portal Orang Tua - Pemantauan Siswa</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { background-color: #f8fafc; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .animate-fade-in { animation: fadeIn 0.4s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body class="text-slate-800 antialiased selection:bg-indigo-200">
+
+    <div id="notification-container" class="fixed top-5 right-5 z-[200] flex flex-col gap-3 pointer-events-none w-full max-w-sm px-4 md:px-0"></div>
+
+    <div id="login-view" class="min-h-screen flex items-center justify-center p-4 animate-fade-in">
+        <div class="bg-white rounded-3xl shadow-xl w-full max-w-sm p-8 border border-slate-100 relative overflow-hidden">
+            <div class="absolute top-0 right-0 p-6 opacity-5"><i class="fa-solid fa-graduation-cap text-8xl"></i></div>
+            <div class="text-center mb-8 relative z-10">
+                <div class="w-20 h-20 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center text-4xl mx-auto mb-4 shadow-sm border border-indigo-100"><i class="fa-solid fa-users-rays"></i></div>
+                <h1 class="text-2xl font-black text-slate-800 tracking-tight">Portal Wali Murid</h1>
+                <p class="text-xs font-bold text-slate-400 mt-1">Pantau Kehadiran & Tagihan Anak</p>
+            </div>
+            <form id="form-login" class="relative z-10">
+                <div class="mb-5">
+                    <label class="text-xs font-black text-slate-500 uppercase tracking-wider block mb-2">NISN Siswa</label>
+                    <input type="text" id="login-nisn" placeholder="Masukkan NISN Anak..." class="w-full border-2 border-slate-200 p-4 rounded-xl font-bold focus:outline-indigo-500 text-center tracking-widest text-lg bg-slate-50" required>
+                </div>
+                <button type="submit" id="btn-login" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-xl shadow-lg transition transform hover:-translate-y-1"><i class="fa-solid fa-magnifying-glass mr-2"></i> Cari Data Siswa</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="dashboard-view" class="hidden min-h-screen pb-20 max-w-md mx-auto bg-white shadow-xl min-h-screen relative animate-fade-in">
+        <div class="bg-indigo-600 rounded-b-[2.5rem] p-6 pt-8 text-white shadow-lg relative overflow-hidden">
+            <div class="absolute top-0 right-0 p-4 opacity-10"><i class="fa-solid fa-shapes text-8xl"></i></div>
+            <div class="flex justify-between items-start relative z-10">
+                <div>
+                    <p class="text-xs font-bold text-indigo-200 uppercase tracking-widest mb-1">Informasi Siswa</p>
+                    <h2 id="ortu-nama" class="text-2xl font-black leading-tight mb-1">Memuat Nama...</h2>
+                    <p id="ortu-kelas" class="text-sm font-semibold text-indigo-100"><i class="fa-solid fa-layer-group mr-1"></i> Kelas -</p>
+                </div>
+                <button onclick="logoutPortal()" class="bg-indigo-700 hover:bg-indigo-800 w-10 h-10 rounded-full flex items-center justify-center transition shadow-inner border border-indigo-500"><i class="fa-solid fa-power-off text-indigo-200"></i></button>
+            </div>
+        </div>
+
+        <div class="p-5 -mt-4 relative z-20 space-y-5">
+            
+            <div id="keuangan-alerts" class="space-y-3"></div>
+
+            <div class="flex bg-slate-100 p-1 rounded-xl font-bold text-sm">
+                <button onclick="switchTab('absen')" id="tab-btn-absen" class="flex-1 py-2.5 rounded-lg bg-white text-indigo-600 shadow-sm transition font-black">Kehadiran</button>
+                <button onclick="switchTab('tagihan')" id="tab-btn-tagihan" class="flex-1 py-2.5 rounded-lg text-slate-500 hover:text-indigo-500 transition">Keuangan</button>
+                <button onclick="switchTab('info')" id="tab-btn-info" class="flex-1 py-2.5 rounded-lg text-slate-500 hover:text-indigo-500 transition">Kelas</button>
+            </div>
+
+            <div id="tab-absen" class="space-y-4 animate-fade-in">
+                <div id="wadah-chart" class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 hidden">
+                    <h3 class="font-black text-slate-700 border-b border-slate-100 pb-2 mb-3 text-xs uppercase tracking-wider text-center"><i class="fa-solid fa-chart-pie text-indigo-500 mr-1"></i> Statistik 30 Hari Terakhir</h3>
+                    <div class="relative h-48 w-full"><canvas id="chartKehadiran"></canvas></div>
+                </div>
+
+                <div class="flex justify-between items-end border-b border-slate-100 pb-2 mb-3">
+                    <h3 class="font-black text-slate-700"><i class="fa-solid fa-clipboard-user text-blue-500 mr-2"></i> Riwayat Kehadiran</h3>
+                </div>
+                <div id="list-absen" class="space-y-3">
+                    <div class="text-center p-4 text-slate-400"><i class="fa-solid fa-circle-notch fa-spin text-xl"></i></div>
+                </div>
+            </div>
+
+            <div id="tab-tagihan" class="hidden space-y-4 animate-fade-in">
+                <div>
+                    <h3 class="font-black text-slate-700 border-b border-slate-100 pb-2 mb-3"><i class="fa-solid fa-file-invoice-dollar text-emerald-500 mr-2"></i> Riwayat SPP Tahun Ajaran Ini</h3>
+                    <div id="list-spp" class="space-y-2">
+                        <div class="text-center p-4 text-slate-400"><i class="fa-solid fa-circle-notch fa-spin text-xl"></i></div>
+                    </div>
+                </div>
+                
+                <div class="pt-2">
+                    <h3 class="font-black text-slate-700 border-b border-slate-100 pb-2 mb-3"><i class="fa-solid fa-tags text-orange-500 mr-2"></i> Tagihan Lainnya</h3>
+                    <div id="list-tagihan-lain" class="space-y-2">
+                        <div class="text-center p-4 text-slate-400"><i class="fa-solid fa-circle-notch fa-spin text-xl"></i></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="tab-info" class="hidden space-y-4 animate-fade-in">
+                <div class="bg-indigo-50 border border-indigo-100 p-4 rounded-xl flex items-center gap-4 shadow-sm">
+                    <div class="w-12 h-12 bg-indigo-200 text-indigo-700 rounded-full flex items-center justify-center text-xl"><i class="fa-solid fa-chalkboard-user"></i></div>
+                    <div class="flex-1">
+                        <p class="text-[10px] font-black text-indigo-400 uppercase tracking-wider mb-0.5">Wali Kelas</p>
+                        <h4 id="info-wali-nama" class="font-black text-slate-800 text-sm">Memuat...</h4>
+                        <p id="info-wali-hp" class="text-xs font-bold text-indigo-600 mt-0.5"><i class="fa-solid fa-phone mr-1"></i> -</p>
+                    </div>
+                </div>
+
+                <div class="pt-2">
+                    <h3 class="font-black text-slate-700 border-b border-slate-100 pb-2 mb-3 flex justify-between items-end">
+                        <span><i class="fa-solid fa-users text-blue-500 mr-2"></i> Daftar Siswa</span>
+                        <span id="total-siswa-kelas" class="text-[10px] bg-slate-100 px-2 py-1 rounded text-slate-500 font-bold">0 Siswa</span>
+                    </h3>
+                    <div id="list-teman-kelas" class="space-y-2 max-h-96 overflow-y-auto custom-scrollbar pr-1">
+                        <div class="text-center p-4 text-slate-400"><i class="fa-solid fa-circle-notch fa-spin text-xl"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyA0lf4KnkbVVlIdgTEKN-QcPjpSKio_xo0",
+            authDomain: "sisfo-cda1a.firebaseapp.com",
+            databaseURL: "https://sisfo-cda1a-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "sisfo-cda1a",
+            storageBucket: "sisfo-cda1a.firebasestorage.app",
+            messagingSenderId: "651098750230",
+            appId: "1:651098750230:web:512cd32fb3623c6267e437",
+            measurementId: "G-81N8LQRKVR"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
+
+        window.showNotification = function(title, message, type = 'info') {
+            const container = document.getElementById('notification-container');
+            const notif = document.createElement('div');
+            
+            let color = 'blue'; let icon = 'circle-info';
+            if (type === 'success') { color = 'emerald'; icon = 'check-circle'; }
+            else if (type === 'error') { color = 'rose'; icon = 'triangle-exclamation'; }
+            else if (type === 'warning') { color = 'amber'; icon = 'bell'; }
+
+            notif.className = `bg-white border-l-4 border-${color}-500 p-4 rounded-xl shadow-xl flex items-start gap-3 transform transition-all duration-300 translate-x-full pointer-events-auto`;
+            notif.innerHTML = `
+                <div class="text-${color}-500 text-xl mt-0.5"><i class="fa-solid fa-${icon}"></i></div>
+                <div class="flex-1">
+                    <h4 class="font-black text-slate-800 text-sm leading-tight">${title}</h4>
+                    <p class="text-xs font-bold text-slate-500 mt-1">${message}</p>
+                </div>
+                <button onclick="this.parentElement.remove()" class="text-slate-400 hover:text-red-500 transition"><i class="fa-solid fa-times"></i></button>
+            `;
+            container.appendChild(notif);
+            setTimeout(() => { notif.classList.remove('translate-x-full'); }, 10);
+            setTimeout(() => {
+                notif.classList.add('translate-x-full', 'opacity-0');
+                setTimeout(() => notif.remove(), 300);
+            }, 4000);
+        };
+
+        window.formatRp = (angka) => { return new Intl.NumberFormat('id-ID').format(angka || 0); };
+
+        let dataAnak = null;
+
+        const savedSiswa = localStorage.getItem('ortu_session_siswa');
+        if (savedSiswa) {
+            dataAnak = JSON.parse(savedSiswa);
+            bukaDashboard();
+        }
+
+        document.getElementById('form-login').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('btn-login');
+            const nisn = document.getElementById('login-nisn').value.trim();
+            
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Mencari...'; btn.disabled = true;
+
+            try {
+                const q = query(collection(db, "Anak"), where("nisn", "==", nisn));
+                const snap = await getDocs(q);
+                
+                if (!snap.empty) {
+                    dataAnak = { id: snap.docs[0].id, ...snap.docs[0].data() };
+                    localStorage.setItem('ortu_session_siswa', JSON.stringify(dataAnak));
+                    window.showNotification('Login Berhasil!', `Selamat datang, Wali dari ${dataAnak.nama}`, 'success');
+                    bukaDashboard();
+                } else {
+                    window.showNotification('Akses Ditolak', 'NISN tidak terdaftar di sistem. Periksa kembali input Anda.', 'error');
+                }
+            } catch (error) { 
+                window.showNotification('Gangguan Server', 'Gagal menghubungi database.', 'error'); 
+            }
+            
+            btn.innerHTML = '<i class="fa-solid fa-magnifying-glass mr-2"></i> Cari Data Siswa'; btn.disabled = false;
+        });
+
+        async function bukaDashboard() {
+            document.getElementById('login-view').classList.add('hidden');
+            document.getElementById('dashboard-view').classList.remove('hidden');
+            
+            document.getElementById('ortu-nama').innerText = dataAnak.nama || 'Tanpa Nama';
+            document.getElementById('ortu-kelas').innerHTML = `<i class="fa-solid fa-layer-group mr-1"></i> Kelas ${dataAnak.kelas || '-'} (${dataAnak.nisn || '-'})`;
+
+            muatDataAbsensi();
+            muatDataKeuangan();
+            muatDataInfoKelas();
+        }
+
+        async function muatDataInfoKelas() {
+            try {
+                if(!dataAnak.kelas) {
+                    document.getElementById('list-teman-kelas').innerHTML = '<div class="text-slate-400 text-xs text-center p-4 font-bold">Kelas belum diatur.</div>';
+                    return;
+                }
+
+                const qKelas = query(collection(db, "Kelas"), where("nama", "==", dataAnak.kelas));
+                const snapKelas = await getDocs(qKelas);
+                
+                let namaWali = "Belum diatur";
+                let hpWali = "Belum diatur";
+                
+                if(!snapKelas.empty) {
+                    const dataKls = snapKelas.docs[0].data();
+                    if(dataKls.waliKelas) namaWali = dataKls.waliKelas;
+                    if(dataKls.noHpWali) hpWali = dataKls.noHpWali;
+                }
+                
+                document.getElementById('info-wali-nama').innerText = namaWali;
+                document.getElementById('info-wali-hp').innerHTML = `<i class="fa-solid fa-phone mr-1"></i> ${hpWali}`;
+
+                const qSiswa = query(collection(db, "Anak"), where("kelas", "==", dataAnak.kelas));
+                const snapSiswa = await getDocs(qSiswa);
+                
+                let semuaSiswa = [];
+                snapSiswa.forEach(doc => semuaSiswa.push({ id: doc.id, ...doc.data() }));
+                
+                semuaSiswa.sort((a, b) => (a.nama || "").localeCompare(b.nama || ""));
+                
+                document.getElementById('total-siswa-kelas').innerText = `${semuaSiswa.length} Siswa`;
+                
+                let htmlSiswa = '';
+                semuaSiswa.forEach((s, index) => {
+                    const isSaya = s.id === dataAnak.id;
+                    htmlSiswa += `
+                    <div class="bg-white border border-slate-100 p-3 rounded-xl flex items-center gap-3 shadow-sm ${isSaya ? 'border-indigo-300 bg-indigo-50' : ''}">
+                        <div class="w-7 h-7 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center text-[10px] font-black">${index + 1}</div>
+                        <div class="flex-1">
+                            <h4 class="font-bold text-slate-700 text-xs ${isSaya ? 'text-indigo-700 font-black' : ''}">${s.nama || '-'} ${isSaya ? '<span class="text-[9px] bg-indigo-500 text-white px-1.5 py-0.5 rounded ml-1">SAYA</span>' : ''}</h4>
+                            <p class="text-[9px] font-bold text-slate-400 mt-0.5">NISN: ${s.nisn || '-'}</p>
+                        </div>
+                    </div>`;
+                });
+                
+                document.getElementById('list-teman-kelas').innerHTML = htmlSiswa;
+
+            } catch (e) {
+                console.error(e);
+                document.getElementById('list-teman-kelas').innerHTML = '<div class="text-rose-500 text-xs font-bold p-4 text-center">Gagal memuat info kelas.</div>';
+            }
+        }
+
+        window.switchTab = function(tab) {
+            ['absen', 'tagihan', 'info'].forEach(t => {
+                const elTab = document.getElementById(`tab-${t}`);
+                const elBtn = document.getElementById(`tab-btn-${t}`);
+                if (elTab && elBtn) {
+                    elTab.classList.add('hidden');
+                    elBtn.className = 'flex-1 py-2.5 rounded-lg text-slate-500 hover:text-indigo-500 transition';
+                }
+            });
+            
+            document.getElementById(`tab-${tab}`).classList.remove('hidden');
+            document.getElementById(`tab-btn-${tab}`).className = 'flex-1 py-2.5 rounded-lg bg-white text-indigo-600 shadow-sm transition font-black';
+        };
+
+        window.logoutPortal = function() {
+            if(!confirm("Keluar dari Portal Anak?")) return;
+            localStorage.removeItem('ortu_session_siswa');
+            location.reload();
+        };
+
+        async function muatDataAbsensi() {
+            try {
+                if (!dataAnak.kelas) {
+                    document.getElementById('list-absen').innerHTML = '<div class="text-slate-400 text-xs font-bold p-4 text-center">Siswa belum memiliki kelas.</div>';
+                    return;
+                }
+
+                const qAbsen = query(collection(db, "AbsensiSiswa"), where("kelas", "==", dataAnak.kelas));
+                const snapAbsen = await getDocs(qAbsen);
+                
+                let semuaAbsen = [];
+                snapAbsen.forEach(doc => semuaAbsen.push(doc.data()));
+
+                semuaAbsen.sort((a, b) => new Date(b.tanggal) - new Date(a.tanggal));
+                const absenTerbatas = semuaAbsen.slice(0, 30);
+
+                let htmlAbsen = '';
+                let dataDitemukan = false;
+                let stats = { Hadir: 0, Izin: 0, Sakit: 0, Alpa: 0 };
+
+                absenTerbatas.forEach(data => {
+                    const tgl = data.tanggal ? data.tanggal.split('-').reverse().join('/') : '-';
+                    const statusAnak = (data.detailSiswa || []).find(s => s.idSiswa === dataAnak.id);
+                    
+                    if(statusAnak) {
+                        dataDitemukan = true;
+                        stats[statusAnak.status] = (stats[statusAnak.status] || 0) + 1;
+
+                        let colorStr = 'slate'; let iconStr = 'minus';
+                        if(statusAnak.status === 'Hadir') { colorStr = 'emerald'; iconStr = 'check'; }
+                        else if(statusAnak.status === 'Izin') { colorStr = 'blue'; iconStr = 'envelope-open-text'; }
+                        else if(statusAnak.status === 'Sakit') { colorStr = 'orange'; iconStr = 'bed-pulse'; }
+                        else if(statusAnak.status === 'Alpa') { colorStr = 'rose'; iconStr = 'triangle-exclamation'; }
+
+                        htmlAbsen += `
+                        <div class="bg-white border-l-4 border-${colorStr}-500 p-3 rounded-r-xl rounded-l-md shadow-sm border-y border-r border-slate-100 flex justify-between items-center mb-2">
+                            <div>
+                                <h4 class="font-black text-slate-700 text-sm mb-0.5">${data.mapel}</h4>
+                                <p class="text-[10px] font-bold text-slate-400"><i class="fa-regular fa-calendar mr-1"></i> ${tgl} <span class="mx-1">|</span> <i class="fa-regular fa-clock mr-1"></i> ${data.jamTxt}</p>
+                            </div>
+                            <div class="bg-${colorStr}-50 text-${colorStr}-600 px-3 py-1.5 rounded-lg text-xs font-black uppercase flex items-center border border-${colorStr}-100 shadow-inner">
+                                <i class="fa-solid fa-${iconStr} mr-1.5"></i> ${statusAnak.status}
+                            </div>
+                        </div>`;
+                    }
+                });
+
+                if(!dataDitemukan) {
+                    htmlAbsen = `<div class="bg-slate-50 border border-slate-100 p-4 rounded-xl text-center text-xs font-bold text-slate-400">Belum ada riwayat kehadiran yang terekam.</div>`;
+                    document.getElementById('wadah-chart').classList.add('hidden');
+                } else {
+                    document.getElementById('wadah-chart').classList.remove('hidden');
+                    if(window.ortuChart) window.ortuChart.destroy();
+                    const ctx = document.getElementById('chartKehadiran').getContext('2d');
+                    window.ortuChart = new Chart(ctx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['Hadir', 'Izin', 'Sakit', 'Alpa'],
+                            datasets: [{
+                                data: [stats.Hadir, stats.Izin, stats.Sakit, stats.Alpa],
+                                backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#f43f5e'],
+                                borderWidth: 2, borderColor: '#ffffff'
+                            }]
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: false, cutout: '65%',
+                            plugins: { legend: { position: 'right', labels: { usePointStyle: true, boxWidth: 8, font: { size: 10, weight: 'bold' } } } }
+                        }
+                    });
+                }
+
+                document.getElementById('list-absen').innerHTML = htmlAbsen;
+            } catch(e) {
+                document.getElementById('list-absen').innerHTML = '<div class="text-rose-500 text-xs font-bold p-4 text-center">Gagal memuat data kehadiran.</div>';
+            }
+        }
+
+        async function muatDataKeuangan() {
+            try {
+                const qSpp = query(collection(db, "PembayaranSPP"), where("idSiswa", "==", dataAnak.id));
+                const snapSpp = await getDocs(qSpp);
+                
+                let semuaSpp = [];
+                snapSpp.forEach(doc => semuaSpp.push(doc.data()));
+                semuaSpp.sort((a, b) => new Date(b.tanggalBayar) - new Date(a.tanggalBayar));
+
+                const today = new Date();
+                const currentMonthIdx = today.getMonth();
+                const startTahunAjaran = new Date(currentMonthIdx >= 6 ? today.getFullYear() : today.getFullYear() - 1, 6, 1);
+
+                const sppTahunIni = semuaSpp.filter(s => new Date(s.tanggalBayar) >= startTahunAjaran);
+
+                let htmlSpp = '';
+                if(sppTahunIni.length === 0) {
+                    htmlSpp = `<div class="bg-slate-50 border border-slate-100 p-4 rounded-xl text-center text-xs font-bold text-slate-400">Belum ada riwayat pembayaran SPP tahun ajaran ini.</div>`;
+                } else {
+                    sppTahunIni.forEach(s => {
+                        const tgl = s.tanggalBayar ? s.tanggalBayar.split('-').reverse().join('/') : '-';
+                        htmlSpp += `
+                        <div class="bg-white border border-slate-100 p-3 rounded-xl flex justify-between items-center shadow-sm mb-2">
+                            <div><p class="font-black text-slate-700 text-sm">SPP Bulan ${s.bulanSpp}</p><p class="text-[10px] font-bold text-slate-400"><i class="fa-solid fa-calendar-check mr-1"></i> Dibayar: ${tgl}</p></div>
+                            <div class="text-right"><p class="font-black text-emerald-600 text-sm">Rp ${window.formatRp(s.nominal)}</p><span class="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded text-[9px] font-black uppercase">${s.isCicilan ? 'Cicilan' : 'Lunas'}</span></div>
+                        </div>`;
+                    });
+                }
+                document.getElementById('list-spp').innerHTML = htmlSpp;
+
+                const namaBulan = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+                
+                let listTargetBulan = [];
+                let idx = 6; 
+                while (true) {
+                    listTargetBulan.push(namaBulan[idx]);
+                    if (idx === currentMonthIdx) break;
+                    idx++;
+                    if (idx > 11) idx = 0;
+                }
+
+                const bulanLunas = sppTahunIni.filter(s => !s.isCicilan).map(s => s.bulanSpp || "");
+                const bulanNunggak = listTargetBulan.filter(target => !bulanLunas.some(lunas => lunas.includes(target)));
+                
+                const jumlahNunggakSPP = bulanNunggak.length;
+                const totalNominalSPP = jumlahNunggakSPP * (dataAnak.sppBulanan || 0);
+
+                let htmlTagihan = '';
+                const tagihans = dataAnak.tagihanLain || [];
+                let totalTunggakanLain = 0;
+                let jumlahTunggakanLain = 0;
+
+                if(tagihans.length === 0) {
+                    htmlTagihan = `<div class="bg-slate-50 border border-slate-100 p-4 rounded-xl text-center text-xs font-bold text-slate-400">Tidak ada tagihan lainnya.</div>`;
+                } else {
+                    tagihans.forEach(t => {
+                        const terbayar = t.terbayar || 0;
+                        const sisa = t.nominal - terbayar;
+                        const isLunas = t.lunas || sisa <= 0;
+                        
+                        if (!isLunas) {
+                            totalTunggakanLain += sisa;
+                            jumlahTunggakanLain++;
+                        }
+
+                        htmlTagihan += `
+                        <div class="bg-white border ${isLunas ? 'border-emerald-200 bg-emerald-50' : 'border-rose-100'} p-4 rounded-xl flex flex-col shadow-sm mb-2">
+                            <div class="flex justify-between items-start mb-2">
+                                <h4 class="font-black text-slate-700 text-sm">${t.nama}</h4>
+                                ${isLunas ? `<span class="text-emerald-500 font-black text-xs"><i class="fa-solid fa-check-double"></i> LUNAS</span>` : `<span class="text-rose-500 font-black text-xs">Sisa: Rp ${window.formatRp(sisa)}</span>`}
+                            </div>
+                            <div class="w-full bg-slate-100 rounded-full h-1.5 mb-1"><div class="bg-${isLunas ? 'emerald' : 'indigo'}-500 h-1.5 rounded-full" style="width: ${(terbayar/t.nominal)*100}%"></div></div>
+                            <div class="flex justify-between text-[10px] font-bold text-slate-500"><span>Target: Rp ${window.formatRp(t.nominal)}</span><span>Dibayar: Rp ${window.formatRp(terbayar)}</span></div>
+                        </div>`;
+                    });
+                }
+                document.getElementById('list-tagihan-lain').innerHTML = htmlTagihan;
+
+                let alertsHTML = '';
+                
+                if (jumlahNunggakSPP > 0 && (dataAnak.sppBulanan || 0) > 0) {
+                    alertsHTML += `
+                    <div class="bg-rose-50 border border-rose-200 p-4 rounded-xl flex items-start gap-3 shadow-sm">
+                        <i class="fa-solid fa-triangle-exclamation text-rose-500 text-xl mt-0.5"></i>
+                        <div>
+                            <h4 class="font-black text-rose-700 text-sm leading-tight">Tunggakan SPP (${jumlahNunggakSPP} Bulan)</h4>
+                            <p class="text-xs font-bold text-rose-500 mt-1">Belum lunas: <span class="font-black">${bulanNunggak.join(', ')}</span>.<br>Total Tunggakan: <b>Rp ${window.formatRp(totalNominalSPP)}</b></p>
+                        </div>
+                    </div>`;
+                }
+                
+                if (jumlahTunggakanLain > 0) {
+                    alertsHTML += `
+                    <div class="bg-amber-50 border border-amber-200 p-4 rounded-xl flex items-start gap-3 shadow-sm">
+                        <i class="fa-solid fa-bell text-amber-500 text-xl mt-0.5"></i>
+                        <div>
+                            <h4 class="font-black text-amber-700 text-sm leading-tight">Tunggakan Tagihan Lain</h4>
+                            <p class="text-xs font-bold text-amber-600 mt-1">Terdapat ${jumlahTunggakanLain} tagihan yang belum lunas (Sisa: Rp ${window.formatRp(totalTunggakanLain)}).</p>
+                        </div>
+                    </div>`;
+                }
+                
+                if (alertsHTML === '') {
+                    alertsHTML = `
+                    <div class="bg-emerald-50 border border-emerald-200 p-4 rounded-xl flex items-center gap-3 shadow-sm">
+                        <i class="fa-solid fa-check-circle text-emerald-500 text-2xl"></i>
+                        <div>
+                            <h4 class="font-black text-emerald-700 text-sm leading-tight">Keuangan Aman</h4>
+                            <p class="text-xs font-bold text-emerald-600 mt-1">Terima kasih, tidak ada tunggakan yang belum dibayar.</p>
+                        </div>
+                    </div>`;
+                }
+                
+                document.getElementById('keuangan-alerts').innerHTML = alertsHTML;
+
+            } catch(e) { 
+                console.error(e);
+                document.getElementById('list-spp').innerHTML = '<div class="text-rose-500 text-xs font-bold p-4">Gagal memuat data keuangan.</div>'; 
+            }
+        }
+    </script>
+</body>
+</html>
