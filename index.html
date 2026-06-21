@@ -54,14 +54,24 @@
             
             <div id="keuangan-alerts" class="space-y-3"></div>
 
-            <div class="flex bg-slate-100 p-1 rounded-xl font-bold text-sm">
-                <button onclick="switchTab('absen')" id="tab-btn-absen" class="flex-1 py-2.5 rounded-lg bg-white text-indigo-600 shadow-sm transition font-black">Kehadiran</button>
-                <button onclick="switchTab('tagihan')" id="tab-btn-tagihan" class="flex-1 py-2.5 rounded-lg text-slate-500 hover:text-indigo-500 transition">Keuangan</button>
-                <button onclick="switchTab('info')" id="tab-btn-info" class="flex-1 py-2.5 rounded-lg text-slate-500 hover:text-indigo-500 transition">Kelas</button>
+            <div class="flex bg-slate-100 p-1 rounded-xl font-bold text-sm overflow-x-auto custom-scrollbar">
+                <button onclick="switchTab('notif')" id="tab-btn-notif" class="flex-1 py-2.5 px-3 rounded-lg bg-white text-indigo-600 shadow-sm transition font-black min-w-max">Notifikasi</button>
+                <button onclick="switchTab('absen')" id="tab-btn-absen" class="flex-1 py-2.5 px-3 rounded-lg text-slate-500 hover:text-indigo-500 transition min-w-max">Kehadiran</button>
+                <button onclick="switchTab('tagihan')" id="tab-btn-tagihan" class="flex-1 py-2.5 px-3 rounded-lg text-slate-500 hover:text-indigo-500 transition min-w-max">Keuangan</button>
+                <button onclick="switchTab('info')" id="tab-btn-info" class="flex-1 py-2.5 px-3 rounded-lg text-slate-500 hover:text-indigo-500 transition min-w-max">Kelas</button>
             </div>
 
-            <div id="tab-absen" class="space-y-4 animate-fade-in">
-                <div id="wadah-chart" class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 hidden">
+            <div id="tab-notif" class="space-y-4 animate-fade-in">
+                <div class="flex justify-between items-end border-b border-slate-100 pb-2 mb-3 mt-2">
+                    <h3 class="font-black text-slate-700"><i class="fa-solid fa-bell text-indigo-500 mr-2"></i> Kotak Masuk Pemberitahuan</h3>
+                </div>
+                <div id="list-notif" class="space-y-3">
+                    <div class="text-center p-4 text-slate-400"><i class="fa-solid fa-circle-notch fa-spin text-xl"></i></div>
+                </div>
+            </div>
+
+            <div id="tab-absen" class="hidden space-y-4 animate-fade-in">
+                <div id="wadah-chart" class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 hidden mt-2">
                     <h3 class="font-black text-slate-700 border-b border-slate-100 pb-2 mb-3 text-xs uppercase tracking-wider text-center"><i class="fa-solid fa-chart-pie text-indigo-500 mr-1"></i> Statistik 30 Hari Terakhir</h3>
                     <div class="relative h-48 w-full"><canvas id="chartKehadiran"></canvas></div>
                 </div>
@@ -115,7 +125,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, getDocs, query, where, updateDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = {
   apiKey: "AIzaSyDpiy6wmmqwum9KApTLGshsQqT-raOyu4Q",
@@ -202,6 +212,7 @@
             muatDataAbsensi();
             muatDataKeuangan();
             muatDataInfoKelas();
+            muatDataNotifikasi();
         }
 
         async function muatDataInfoKelas() {
@@ -222,9 +233,32 @@
                     if(dataKls.waliKelas) namaWali = dataKls.waliKelas;
                     if(dataKls.noHpWali) hpWali = dataKls.noHpWali;
                 }
+
+                const snapLembaga = await getDocs(collection(db, "Lembaga"));
+                let jamMasuk = "07:00"; let jamPulang = "15:00";
+                if(!snapLembaga.empty) {
+                    const dataLembaga = snapLembaga.docs[0].data();
+                    if(dataLembaga.jamMasukKerja) jamMasuk = dataLembaga.jamMasukKerja;
+                    if(dataLembaga.jamPulangKerja) jamPulang = dataLembaga.jamPulangKerja;
+                }
                 
                 document.getElementById('info-wali-nama').innerText = namaWali;
-                document.getElementById('info-wali-hp').innerHTML = `<i class="fa-solid fa-phone mr-1"></i> ${hpWali}`;
+
+                if (hpWali !== "Belum diatur" && hpWali !== "-") {
+                    let noWa = hpWali.replace(/[^0-9]/g, '');
+                    if (noWa.startsWith('0')) noWa = '62' + noWa.substring(1);
+                    
+                    document.getElementById('info-wali-hp').innerHTML = `
+                        <a href="https://wa.me/${noWa}" target="_blank" class="inline-flex items-center text-emerald-600 hover:text-emerald-700 transition mt-1">
+                            <i class="fa-brands fa-whatsapp text-lg mr-1.5"></i> ${hpWali}
+                        </a>
+                        <span class="block mt-1.5 text-[9px] text-slate-500 font-black tracking-wider uppercase bg-white/50 px-2 py-1 rounded border border-indigo-100 shadow-sm">
+                            <i class="fa-regular fa-clock text-indigo-400 mr-1"></i> Harap hubungi di jam kerja: ${jamMasuk} - ${jamPulang}
+                        </span>
+                    `;
+                } else {
+                    document.getElementById('info-wali-hp').innerHTML = `<i class="fa-solid fa-phone mr-1"></i> ${hpWali}`;
+                }
 
                 const qSiswa = query(collection(db, "Anak"), where("kelas", "==", dataAnak.kelas));
                 const snapSiswa = await getDocs(qSiswa);
@@ -258,18 +292,18 @@
         }
 
         window.switchTab = function(tab) {
-            ['absen', 'tagihan', 'info'].forEach(t => {
-                const elTab = document.getElementById(`tab-${t}`);
-                const elBtn = document.getElementById(`tab-btn-${t}`);
-                if (elTab && elBtn) {
-                    elTab.classList.add('hidden');
-                    elBtn.className = 'flex-1 py-2.5 rounded-lg text-slate-500 hover:text-indigo-500 transition';
-                }
-            });
-            
-            document.getElementById(`tab-${tab}`).classList.remove('hidden');
-            document.getElementById(`tab-btn-${tab}`).className = 'flex-1 py-2.5 rounded-lg bg-white text-indigo-600 shadow-sm transition font-black';
-        };
+                ['notif', 'absen', 'tagihan', 'info'].forEach(t => {
+                    const elTab = document.getElementById(`tab-${t}`);
+                    const elBtn = document.getElementById(`tab-btn-${t}`);
+                    if (elTab && elBtn) {
+                        elTab.classList.add('hidden');
+                        elBtn.className = 'flex-1 py-2.5 px-3 rounded-lg text-slate-500 hover:text-indigo-500 transition min-w-max';
+                    }
+                });
+                
+                document.getElementById(`tab-${tab}`).classList.remove('hidden');
+                document.getElementById(`tab-btn-${tab}`).className = 'flex-1 py-2.5 px-3 rounded-lg bg-white text-indigo-600 shadow-sm transition font-black min-w-max';
+            };
 
         window.logoutPortal = function() {
             if(!confirm("Keluar dari Portal Anak?")) return;
@@ -474,6 +508,101 @@
                 document.getElementById('list-spp').innerHTML = '<div class="text-rose-500 text-xs font-bold p-4">Gagal memuat data keuangan.</div>'; 
             }
         }
+async function muatDataNotifikasi() {
+                try {
+                    const qNotif = query(collection(db, "NotifikasiOrtu"), where("idSiswa", "==", dataAnak.id));
+                    const snapNotif = await getDocs(qNotif);
+                    
+                    let semuaNotif = [];
+                    const todayStr = new Date().toISOString().split('T')[0];
+                    
+                    snapNotif.forEach(doc => {
+                        const d = doc.data();
+                        // Filter: Hanya tampilkan notifikasi yang belum melewati masa expired
+                        if (!d.expiredAt || d.expiredAt >= todayStr) {
+                            semuaNotif.push({ id: doc.id, ...d });
+                        }
+                    });
+                    
+                    semuaNotif.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+                    let htmlNotif = '';
+                    if(semuaNotif.length === 0) {
+                        htmlNotif = `<div class="bg-slate-50 border border-slate-100 p-4 rounded-xl text-center text-xs font-bold text-slate-400">Belum ada pemberitahuan baru.</div>`;
+                    } else {
+                        semuaNotif.forEach(n => {
+                            const tgl = n.createdAt ? new Date(n.createdAt).toLocaleDateString('id-ID', {day:'2-digit', month:'short', year:'numeric'}) : '-';
+                            let aksiHtml = '';
+                            
+                            // Membersihkan tanda kutip agar tidak merusak fungsi onclick di HTML
+                            const safeItemName = (n.namaItem || '').replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                            const nomFormatted = Number(n.nominal || 0).toLocaleString('id-ID');
+                            
+                            if (n.tipe === 'Pembelian' && n.status === 'Pending') {
+                                aksiHtml = `
+                                <div class="mt-4 flex gap-2 border-t border-indigo-100 pt-3">
+                                    <button onclick="window.responPembelian('${n.id}', true, '${safeItemName}', ${n.nominal})" class="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-2.5 rounded-lg text-xs font-black shadow-md transition transform hover:-translate-y-0.5"><i class="fa-solid fa-check mr-1"></i> Setuju & Masukkan Tagihan</button>
+                                    <button onclick="window.responPembelian('${n.id}', false, '${safeItemName}', ${n.nominal})" class="bg-rose-100 hover:bg-rose-500 text-rose-600 hover:text-white px-5 py-2.5 rounded-lg text-xs font-black shadow-sm transition">Tolak</button>
+                                </div>`;
+                            } else if (n.tipe === 'Pembelian' && n.status === 'Disetujui') {
+                                aksiHtml = `<div class="mt-3 text-[10px] font-black text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg inline-block border border-emerald-200"><i class="fa-solid fa-check-double mr-1"></i> Telah Disetujui & Masuk Tagihan Keuangan</div>`;
+                            } else if (n.tipe === 'Pembelian' && n.status === 'Ditolak') {
+                                aksiHtml = `<div class="mt-3 text-[10px] font-black text-rose-600 bg-rose-50 px-3 py-1.5 rounded-lg inline-block border border-rose-200"><i class="fa-solid fa-xmark mr-1"></i> Telah Ditolak</div>`;
+                            }
+
+                            htmlNotif += `
+                            <div class="bg-white border ${n.tipe === 'Pembelian' ? 'border-indigo-300 shadow-md bg-indigo-50/20' : 'border-slate-100 shadow-sm'} p-5 rounded-2xl flex flex-col mb-3 transition">
+                                <div class="flex justify-between items-start mb-2 gap-2">
+                                    <h4 class="font-black text-slate-800 text-sm leading-tight">${n.judul}</h4>
+                                    <span class="text-[9px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md border border-slate-200 whitespace-nowrap shadow-inner">${tgl}</span>
+                                </div>
+                                <p class="text-xs text-slate-600 font-medium leading-relaxed">${n.isi}</p>
+                                ${n.tipe === 'Pembelian' ? `<div class="text-xs font-black text-indigo-700 mt-3 bg-indigo-100 p-2.5 rounded-xl border border-indigo-200 shadow-inner flex flex-col md:flex-row md:items-center justify-between gap-2"><span><i class="fa-solid fa-cart-shopping mr-1.5 opacity-50"></i> Item: ${n.namaItem || '-'}</span> <span>Rp ${nomFormatted}</span></div>` : ''}
+                                ${aksiHtml}
+                            </div>`;
+                        });
+                    }
+                    document.getElementById('list-notif').innerHTML = htmlNotif;
+                } catch(e) { 
+                    document.getElementById('list-notif').innerHTML = '<div class="text-rose-500 text-xs font-bold p-4 text-center">Gagal memuat pemberitahuan.</div>'; 
+                }
+            }
+
+            window.responPembelian = async function(idNotif, isSetuju, namaItem, nominal) {
+                const nomFormatted = Number(nominal || 0).toLocaleString('id-ID');
+                if(!confirm(isSetuju ? `Yakin SETUJU untuk pembelian ${namaItem} seharga Rp ${nomFormatted}?\n\nBiaya ini akan langsung ditambahkan ke Tagihan Keuangan Anda.` : `Yakin MENOLAK pembelian ${namaItem}?`)) return;
+                
+                try {
+                    const statusBaru = isSetuju ? 'Disetujui' : 'Ditolak';
+                    await updateDoc(doc(db, "NotifikasiOrtu", idNotif), { status: statusBaru, updatedAt: new Date().toISOString() });
+                    
+                    if (isSetuju) {
+                        const tagihanLain = dataAnak.tagihanLain || [];
+                        tagihanLain.push({
+                            id: Date.now().toString() + Math.floor(Math.random()*100),
+                            nama: namaItem,
+                            metode: '1x',
+                            nominal: nominal,
+                            terbayar: 0,
+                            lunas: false
+                        });
+                        
+                        await updateDoc(doc(db, "Anak", dataAnak.id), { tagihanLain: tagihanLain });
+                        dataAnak.tagihanLain = tagihanLain;
+                        localStorage.setItem('ortu_session_siswa', JSON.stringify(dataAnak));
+                        
+                        window.showNotification('Disetujui', `${namaItem} berhasil ditambahkan ke tagihan keuangan.`, 'success');
+                        muatDataKeuangan(); 
+                    } else {
+                        window.showNotification('Ditolak', 'Pembelian telah ditolak.', 'info');
+                    }
+                    
+                    muatDataNotifikasi(); 
+                } catch (e) {
+                    window.showNotification('Gagal', 'Terjadi kesalahan sistem.', 'error');
+                }
+            };
+
     </script>
 </body>
 </html>
